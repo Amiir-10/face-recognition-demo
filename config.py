@@ -8,8 +8,8 @@ CAMERA_HEIGHT = 720
 
 # Detection
 DETECTION_MODEL = "hog"             # "cnn" (GPU) or "hog" (CPU fallback)
-DETECTION_SCALE = 0.5               # Downscale factor for detection speed
-DETECTION_EVERY_N_FRAMES = 2        # Run detection every Nth frame
+DETECTION_SCALE = 0.25               # Downscale factor for detection speed
+DETECTION_EVERY_N_FRAMES = 3        # Run detection every Nth frame
 
 # Recognition
 RECOGNITION_THRESHOLD = 0.6         # Lower = stricter matching

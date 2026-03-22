@@ -59,6 +59,7 @@ def main() -> None:
     frame_count = 0
     fps = 0.0
     prev_time = time.time()
+    cached_results: list[tuple[str, float]] = []
 
     try:
         while True:
@@ -67,17 +68,23 @@ def main() -> None:
                 print("Failed to read from camera. Exiting.")
                 break
 
+            is_detection_frame = frame_count % detector._every_n_frames == 0
             face_locations = detector.detect(frame, frame_count)
 
-            results = []
-            if face_locations:
-                encodings = encoder.encode(frame, face_locations)
-                for enc in encodings:
-                    name, confidence = recognizer.recognize(enc, database)
-                    results.append((name, confidence))
+            if is_detection_frame:
+                results = []
+                if face_locations:
+                    encodings = encoder.encode(frame, face_locations)
+                    for enc in encodings:
+                        name, confidence = recognizer.recognize(enc, database)
+                        results.append((name, confidence))
 
-            while len(results) < len(face_locations):
-                results.append(("Unknown", 0.0))
+                while len(results) < len(face_locations):
+                    results.append(("Unknown", 0.0))
+
+                cached_results = results
+            else:
+                results = cached_results
 
             frame = renderer.draw_results(frame, face_locations, results)
 
