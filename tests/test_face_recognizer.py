@@ -19,26 +19,37 @@ def db():
 
 @pytest.fixture
 def recognizer():
-    return FaceRecognizer(threshold=0.6)
+    return FaceRecognizer(threshold=0.35)
+
+
+def _unit(v: np.ndarray) -> np.ndarray:
+    """Return L2-normalized vector."""
+    return v / np.linalg.norm(v)
 
 
 def test_recognize_empty_database(recognizer, db):
-    fake_encoding = np.random.rand(128)
-    name, confidence = recognizer.recognize(fake_encoding, db)
+    fake_embedding = _unit(np.random.rand(512).astype(np.float32))
+    name, confidence = recognizer.recognize(fake_embedding, db)
     assert name == "Unknown"
     assert confidence == 0.0
 
 
 def test_recognize_exact_match(recognizer, db):
-    encoding = np.random.rand(128)
-    db.add_face("amir", encoding)
-    name, confidence = recognizer.recognize(encoding, db)
+    embedding = _unit(np.random.rand(512).astype(np.float32))
+    db.add_face("amir", embedding)
+    name, confidence = recognizer.recognize(embedding, db)
     assert name == "amir"
     assert confidence == 100.0
 
 
 def test_recognize_no_match_above_threshold(recognizer, db):
-    db.add_face("amir", np.zeros(128))
-    far_encoding = np.ones(128)
-    name, confidence = recognizer.recognize(far_encoding, db)
+    # Store a unit vector in one direction, query with an orthogonal vector
+    # Cosine similarity = 0.0, which is below threshold 0.35 -> Unknown
+    stored = np.zeros(512, dtype=np.float32)
+    stored[0] = 1.0
+    db.add_face("amir", stored)
+
+    query = np.zeros(512, dtype=np.float32)
+    query[1] = 1.0  # orthogonal to stored
+    name, confidence = recognizer.recognize(query, db)
     assert name == "Unknown"

@@ -2,7 +2,6 @@
 import time
 
 import cv2
-import numpy as np
 
 from camera_manager import CameraManager
 from face_detector import FaceDetector
@@ -56,42 +55,46 @@ class RegistrationManager:
         successful = 0
 
         for i in range(num_snapshots):
-            for sec in range(SNAPSHOT_COUNTDOWN_SECONDS, 0, -1):
+            # Smooth countdown: keep display updating at ~33 FPS instead of blocking
+            deadline = time.time() + SNAPSHOT_COUNTDOWN_SECONDS
+            while time.time() < deadline:
                 ret, frame = self._camera.read_frame()
-                if not ret:
+                if not ret or frame is None:
                     print("Camera error during registration.")
                     return False
-                msg = f"Snapshot {i + 1}/{num_snapshots} in {sec}..."
-                frame = self._renderer.draw_registration_overlay(frame, msg)
-                cv2.imshow("FaceID", frame)
-                cv2.waitKey(1000)
+                remaining = int(deadline - time.time()) + 1
+                msg = f"Snapshot {i + 1}/{num_snapshots} in {remaining}..."
+                annotated = self._renderer.draw_registration_overlay(frame, msg)
+                cv2.imshow("FaceID", annotated)
+                cv2.waitKey(30)
 
             ret, frame = self._camera.read_frame()
-            if not ret:
+            if not ret or frame is None:
                 print("Camera error during capture.")
                 return False
 
-            locations = self._detector.detect(frame, 0)
+            faces = self._detector.detect(frame, 0)
 
-            if len(locations) == 0:
+            if len(faces) == 0:
                 print(f"  Snapshot {i + 1}: No face detected. Skipping.")
                 continue
-            elif len(locations) > 1:
+            elif len(faces) > 1:
                 print(f"  Snapshot {i + 1}: Multiple faces detected. Skipping. (Ensure only you are in frame)")
                 continue
 
-            encodings = self._encoder.encode(frame, locations)
-            if encodings:
-                self._database.add_face(name.lower(), encodings[0])
+            embeddings = self._encoder.encode(faces)
+            if embeddings:
+                self._database.add_face(name.lower(), embeddings[0], auto_save=False)
                 successful += 1
                 print(f"  Snapshot {i + 1}: Captured successfully.")
 
                 msg = f"Captured! ({successful}/{num_snapshots})"
-                frame = self._renderer.draw_registration_overlay(frame, msg)
-                cv2.imshow("FaceID", frame)
+                annotated = self._renderer.draw_registration_overlay(frame, msg)
+                cv2.imshow("FaceID", annotated)
                 cv2.waitKey(500)
 
         if successful > 0:
+            self._database.save()
             print(f"\nRegistered '{name}' with {successful} encoding(s).\n")
             return True
         else:

@@ -1,56 +1,37 @@
-"""Face detection using the face_recognition library."""
-import cv2
+"""Face detection and embedding using InsightFace."""
 import numpy as np
-import face_recognition
 
-from config import DETECTION_MODEL, DETECTION_SCALE, DETECTION_EVERY_N_FRAMES
+from config import DETECTION_EVERY_N_FRAMES
 
 
 class FaceDetector:
-    """Detects face locations in frames. Supports frame skipping and downscaling for performance."""
+    """Detects faces and computes ArcFace embeddings via InsightFace. Supports frame skipping."""
 
-    def __init__(
-        self,
-        model: str = DETECTION_MODEL,
-        scale: float = DETECTION_SCALE,
-        every_n_frames: int = DETECTION_EVERY_N_FRAMES,
-    ) -> None:
-        self._model = model
-        self._scale = scale
+    def __init__(self, app, every_n_frames: int = DETECTION_EVERY_N_FRAMES) -> None:
+        """
+        Args:
+            app: Initialized insightface.app.FaceAnalysis instance (shared).
+            every_n_frames: Run detection every Nth frame; return cached results otherwise.
+        """
+        self._app = app
         self._every_n_frames = every_n_frames
-        self._cached_locations: list[tuple] = []
+        self._cached_faces: list = []
 
-    def detect(self, frame: np.ndarray, frame_count: int) -> list[tuple]:
-        """Detect faces in frame. Uses cached results for skipped frames.
+    def detect(self, frame: np.ndarray, frame_count: int) -> list:
+        """Detect faces in frame. Returns cached results on skipped frames.
 
         Args:
-            frame: BGR image (full resolution).
+            frame: BGR image (OpenCV format).
             frame_count: Current frame number (0-indexed).
 
         Returns:
-            List of face locations as (top, right, bottom, left) tuples
-            in original frame coordinates.
+            List of InsightFace Face objects. Each face has:
+                .bbox: [x1, y1, x2, y2] (left, top, right, bottom)
+                .embedding: 512D L2-normalized numpy array (ArcFace)
+                .det_score: detection confidence
         """
         if frame_count % self._every_n_frames != 0:
-            return self._cached_locations
+            return self._cached_faces
 
-        small_frame = cv2.resize(frame, (0, 0), fx=self._scale, fy=self._scale)
-        rgb_small = cv2.cvtColor(small_frame, cv2.COLOR_BGR2RGB)
-        locations = face_recognition.face_locations(rgb_small, model=self._model)
-
-        inv_scale = 1.0 / self._scale
-        self._cached_locations = [
-            (
-                int(top * inv_scale),
-                int(right * inv_scale),
-                int(bottom * inv_scale),
-                int(left * inv_scale),
-            )
-            for top, right, bottom, left in locations
-        ]
-
-        return self._cached_locations
-
-    @property
-    def model(self) -> str:
-        return self._model
+        self._cached_faces = self._app.get(frame)
+        return self._cached_faces

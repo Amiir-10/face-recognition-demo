@@ -2,23 +2,23 @@
 import os
 
 import cv2
-import face_recognition
 
 from face_database import FaceDatabase
-from face_encoder import FaceEncoder
 
 SUPPORTED_EXTENSIONS = {".jpg", ".jpeg", ".png"}
 
 
 class FolderImporter:
-    """Scans a folder of person_name/image.jpg and imports face encodings."""
+    """Scans a folder of person_name/image.jpg and imports face embeddings."""
 
-    def import_faces(
-        self,
-        folder_path: str,
-        database: FaceDatabase,
-        encoder: FaceEncoder,
-    ) -> dict[str, int]:
+    def __init__(self, app) -> None:
+        """
+        Args:
+            app: Initialized insightface.app.FaceAnalysis instance (shared).
+        """
+        self._app = app
+
+    def import_faces(self, folder_path: str, database: FaceDatabase) -> dict[str, int]:
         """Import faces from labeled folder structure.
 
         Expected structure:
@@ -28,7 +28,7 @@ class FolderImporter:
                     image2.png
 
         Returns:
-            Dict of {name: count_of_encodings_imported}.
+            Dict of {name: count_of_embeddings_imported}.
         """
         if not os.path.isdir(folder_path):
             print(f"Folder not found: {folder_path}")
@@ -55,24 +55,26 @@ class FolderImporter:
                     print(f"  Warning: Could not read {filepath}")
                     continue
 
-                rgb_image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-                locations = face_recognition.face_locations(rgb_image, model="hog")
+                faces = self._app.get(image)
 
-                if len(locations) == 0:
+                if len(faces) == 0:
                     print(f"  Warning: No face found in {filepath}")
                     continue
-                elif len(locations) > 1:
+                elif len(faces) > 1:
                     print(f"  Warning: Multiple faces in {filepath}, skipping")
                     continue
 
-                encodings = encoder.encode(image, locations)
-                if encodings:
-                    database.add_face(name, encodings[0])
+                embedding = faces[0].embedding
+                if embedding is not None:
+                    database.add_face(name, embedding, auto_save=False)
                     count += 1
                     print(f"  Imported: {name}/{filename}")
 
             if count > 0:
                 summary[name] = count
-                print(f"  Total for '{name}': {count} encoding(s)")
+                print(f"  Total for '{name}': {count} embedding(s)")
+
+        if summary:
+            database.save()
 
         return summary

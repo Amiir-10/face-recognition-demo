@@ -27,13 +27,13 @@ class DisplayRenderer:
 
         Args:
             frame: BGR image to annotate.
-            face_locations: List of (top, right, bottom, left).
+            face_locations: List of (left, top, right, bottom) tuples (InsightFace bbox order).
             results: List of (name, confidence) matching face_locations order.
 
         Returns:
             Annotated frame.
         """
-        for (top, right, bottom, left), (name, confidence) in zip(face_locations, results):
+        for (left, top, right, bottom), (name, confidence) in zip(face_locations, results):
             is_known = name != UNKNOWN_LABEL
             color = BOX_COLOR_KNOWN if is_known else BOX_COLOR_UNKNOWN
 

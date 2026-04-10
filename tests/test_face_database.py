@@ -19,8 +19,8 @@ def db():
 
 @pytest.fixture
 def sample_encoding():
-    """Fake 128D face encoding."""
-    return np.random.rand(128)
+    """Fake 512D face embedding (InsightFace ArcFace output size)."""
+    return np.random.rand(512).astype(np.float32)
 
 
 def test_empty_database(db):
@@ -36,7 +36,7 @@ def test_add_face(db, sample_encoding):
 
 def test_add_multiple_encodings_same_person(db, sample_encoding):
     db.add_face("amir", sample_encoding)
-    db.add_face("amir", np.random.rand(128))
+    db.add_face("amir", np.random.rand(512).astype(np.float32))
     assert db.face_count() == 1
     encodings, names = db.get_all_encodings()
     assert names.count("amir") == 2
@@ -44,7 +44,7 @@ def test_add_multiple_encodings_same_person(db, sample_encoding):
 
 def test_get_all_encodings(db, sample_encoding):
     db.add_face("amir", sample_encoding)
-    db.add_face("omar", np.random.rand(128))
+    db.add_face("omar", np.random.rand(512).astype(np.float32))
     encodings, names = db.get_all_encodings()
     assert len(encodings) == 2
     assert len(names) == 2
@@ -83,3 +83,19 @@ def test_empty_get_all_encodings(db):
     encodings, names = db.get_all_encodings()
     assert encodings == []
     assert names == []
+
+
+def test_auto_save_false_does_not_persist(sample_encoding):
+    """add_face with auto_save=False should not write to disk."""
+    if os.path.exists(TEST_DB_PATH):
+        os.remove(TEST_DB_PATH)
+
+    db = FaceDatabase(TEST_DB_PATH)
+    db.add_face("amir", sample_encoding, auto_save=False)
+
+    # Reload from disk -- should still be empty since we never saved
+    db2 = FaceDatabase(TEST_DB_PATH)
+    assert db2.face_count() == 0
+
+    if os.path.exists(TEST_DB_PATH):
+        os.remove(TEST_DB_PATH)

@@ -6,13 +6,14 @@ CAMERA_INDEX = 0
 CAMERA_WIDTH = 1280
 CAMERA_HEIGHT = 720
 
-# Detection
-DETECTION_MODEL = "hog"             # "cnn" (GPU) or "hog" (CPU fallback)
-DETECTION_SCALE = 0.25               # Downscale factor for detection speed
-DETECTION_EVERY_N_FRAMES = 3        # Run detection every Nth frame
+# Detection (InsightFace)
+INSIGHTFACE_MODEL = "buffalo_l"          # Detection + ArcFace recognition model pack
+INSIGHTFACE_CTX_ID = 0                   # 0 = first CUDA GPU, -1 = CPU only
+INSIGHTFACE_DET_SIZE = (640, 640)        # Input size for detection model
+DETECTION_EVERY_N_FRAMES = 3             # Run detection every Nth frame
 
 # Recognition
-RECOGNITION_THRESHOLD = 0.6         # Lower = stricter matching
+RECOGNITION_THRESHOLD = 0.35            # Cosine similarity threshold (higher = stricter)
 UNKNOWN_LABEL = "Unknown"
 
 # Persistence

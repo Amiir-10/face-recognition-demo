@@ -3,6 +3,7 @@ import time
 import sys
 
 import cv2
+from insightface.app import FaceAnalysis
 
 from config import (
     CAMERA_INDEX,
@@ -10,6 +11,9 @@ from config import (
     CAMERA_HEIGHT,
     KNOWN_FACES_DIR,
     DATABASE_PATH,
+    INSIGHTFACE_MODEL,
+    INSIGHTFACE_CTX_ID,
+    INSIGHTFACE_DET_SIZE,
 )
 from camera_manager import CameraManager
 from face_detector import FaceDetector
@@ -37,6 +41,13 @@ def print_controls() -> None:
 
 def main() -> None:
     print("Starting FaceID...")
+    print("Loading InsightFace model (first run downloads ~300MB)...")
+
+    app = FaceAnalysis(
+        name=INSIGHTFACE_MODEL,
+        providers=["DmlExecutionProvider", "CPUExecutionProvider"],
+    )
+    app.prepare(ctx_id=INSIGHTFACE_CTX_ID, det_size=INSIGHTFACE_DET_SIZE)
 
     try:
         camera = CameraManager(CAMERA_INDEX, CAMERA_WIDTH, CAMERA_HEIGHT)
@@ -44,49 +55,54 @@ def main() -> None:
         print(f"Error: {e}")
         sys.exit(1)
 
-    detector = FaceDetector()
+    detector = FaceDetector(app)
     encoder = FaceEncoder()
     database = FaceDatabase(DATABASE_PATH)
     recognizer = FaceRecognizer()
     renderer = DisplayRenderer()
     registration_mgr = RegistrationManager(camera, detector, encoder, database, renderer)
-    importer = FolderImporter()
+    importer = FolderImporter(app)
 
     print(f"Loaded {database.face_count()} registered face(s).")
-    print(f"Using detection model: {detector.model}")
     print_controls()
 
     frame_count = 0
     fps = 0.0
     prev_time = time.time()
     cached_results: list[tuple[str, float]] = []
+    cached_faces: list = []
 
     try:
         while True:
             ret, frame = camera.read_frame()
-            if not ret:
-                print("Failed to read from camera. Exiting.")
-                break
+            if not ret or frame is None:
+                # Background thread hasn't captured first frame yet
+                continue
 
             is_detection_frame = frame_count % detector._every_n_frames == 0
-            face_locations = detector.detect(frame, frame_count)
+            faces = detector.detect(frame, frame_count)
 
             if is_detection_frame:
                 results = []
-                if face_locations:
-                    encodings = encoder.encode(frame, face_locations)
-                    for enc in encodings:
-                        name, confidence = recognizer.recognize(enc, database)
+                if faces:
+                    embeddings = encoder.encode(faces)
+                    for emb in embeddings:
+                        name, confidence = recognizer.recognize(emb, database)
                         results.append((name, confidence))
-
-                while len(results) < len(face_locations):
+                while len(results) < len(faces):
                     results.append(("Unknown", 0.0))
-
                 cached_results = results
+                cached_faces = faces
             else:
                 results = cached_results
+                faces = cached_faces
 
-            frame = renderer.draw_results(frame, face_locations, results)
+            # InsightFace bbox: [x1, y1, x2, y2] = (left, top, right, bottom)
+            bboxes = [
+                (int(f.bbox[0]), int(f.bbox[1]), int(f.bbox[2]), int(f.bbox[3]))
+                for f in faces
+            ]
+            frame = renderer.draw_results(frame, bboxes, results)
 
             current_time = time.time()
             fps = 1.0 / max(current_time - prev_time, 0.001)
@@ -108,17 +124,17 @@ def main() -> None:
 
             elif key == ord("i") or key == ord("I"):
                 print(f"\nImporting faces from: {KNOWN_FACES_DIR}")
-                summary = importer.import_faces(KNOWN_FACES_DIR, database, encoder)
+                summary = importer.import_faces(KNOWN_FACES_DIR, database)
                 if summary:
-                    print(f"Import complete: {sum(summary.values())} total encoding(s).\n")
+                    print(f"Import complete: {sum(summary.values())} total embedding(s).\n")
                 else:
                     print("No faces imported. Check folder structure.\n")
 
             elif key == ord("l") or key == ord("L"):
-                faces = database.list_faces()
-                if faces:
-                    print(f"\nRegistered faces ({len(faces)}):")
-                    for name in sorted(faces):
+                faces_list = database.list_faces()
+                if faces_list:
+                    print(f"\nRegistered faces ({len(faces_list)}):")
+                    for name in sorted(faces_list):
                         print(f"  - {name.title()}")
                     print()
                 else:
